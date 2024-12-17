@@ -11,8 +11,8 @@
 ## TODO List
 - [x] Training and inference code.
 - [x] Pipeline to reproduce the evaluation results on the proposed OnePose dataset.
-- [ ] `OnePose Cap` app: we are preparing for the release of the data capture app to the App Store (iOS only), please stay tuned.
-- [ ] Demo pipeline for running OnePose with custom-captured data including the online tracking module.
+- [x] `OnePose Cap` app is available at the [App Store](https://apps.apple.com/cn/app/onepose-capture/id6447052065?l=en-GB) (iOS only) to capture your own training and test data.
+- [x] Demo pipeline for running OnePose with custom-captured data.
 
 ## Installation
 
