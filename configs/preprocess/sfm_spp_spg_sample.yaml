@@ -2,7 +2,7 @@
 
 type: sfm
 work_dir: ${hydra:runtime.cwd}
-redo: False
+redo: True
 
 scan_data_dir: ${work_dir}/data/onepose_datasets/sample_data
 

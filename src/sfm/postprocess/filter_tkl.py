@@ -2,6 +2,8 @@ import os
 import numpy as np
 import os.path as osp
 import matplotlib.pyplot as plt
+import pycolmap
+from pathlib import Path
 
 from src.utils.colmap.read_write_model import write_model
 
@@ -77,5 +79,12 @@ def vis_tkl_filtered_pcds(model_path, points_count_list, track_length, output_pa
         os.makedirs(output_path)
     
     write_model(cameras, images, points3D, output_path, '.bin')
-    os.system(f'colmap model_converter --input_path {output_path} --output_path {output_file_path} --output_type PLY')
+    model_path = Path(output_path)
+    output_ply_path = Path(output_file_path)
+
+    # Load the model
+    reconstruction = pycolmap.Reconstruction(model_path)
+
+    # Export to PLY
+    reconstruction.export_PLY(output_ply_path)
     return output_file_path

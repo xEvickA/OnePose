@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 
 def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
            idxs_file, img_id, ann_id, images, annotations):
+    print("merge")
     """ To prepare training and test objects, we merge annotations about difference objs"""
     with open(anno_2d_file, 'r') as f:
         annos_2d = json.load(f)
@@ -38,6 +39,7 @@ def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
 
 
 def merge_anno(cfg):
+    print("merge anno")
     """ Merge different objects' anno file into one anno file """
     anno_dirs = []
 
@@ -78,6 +80,7 @@ def merge_anno(cfg):
 
 
 def sfm(cfg):
+    print("sfm")
     """ Reconstruct and postprocess sparse object point cloud, and store point cloud features"""
     data_dirs = cfg.dataset.data_dir
     down_ratio = cfg.sfm.down_ratio
@@ -113,6 +116,7 @@ def sfm(cfg):
 
 
 def sfm_core(cfg, img_lists, outputs_dir_root):
+    print("sfm core")
     """ Sparse reconstruction: extract features, match features, triangulation"""
     from src.sfm import extract_features, match_features, \
                          generate_empty, triangulation, pairs_from_poses
@@ -140,6 +144,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     
     
 def postprocess(cfg, img_lists, root_dir, outputs_dir_root):
+    print("postprocess")
     """ Filter points and average feature"""
     from src.sfm.postprocess import filter_points, feature_process, filter_tkl
 

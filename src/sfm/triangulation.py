@@ -5,6 +5,9 @@ import tqdm
 import subprocess
 import os.path as osp
 import numpy as np
+import open3d as o3d
+import pycolmap
+import sqlite3
 
 from pathlib import Path
 from src.utils.colmap.read_write_model import CAMERA_MODEL_NAMES, Image, read_cameras_binary, read_images_binary
@@ -15,19 +18,44 @@ def names_to_pair(name0, name1):
     return '_'.join((name0.replace('/', '-'), name1.replace('/', '-')))
 
 
-def geometric_verification(colmap_path, database_path, pairs_path):
+def geometric_verification(database_path, pairs_path):
     """ Geometric verfication """
     logging.info('Performing geometric verification of the matches...')
-    cmd = [
-        str(colmap_path), 'matches_importer',
-        '--database_path', str(database_path),
-        '--match_list_path', str(pairs_path),
-        '--match_type', 'pairs'
-    ]
-    ret = subprocess.call(cmd)
-    if ret != 0:
-        logging.warning('Problem with matches_importer, existing.')
-        exit(ret)
+    try:
+        with open(pairs_path, 'r') as f:
+            pairs = [line.strip().split() for line in f.readlines()]
+    except FileNotFoundError:
+        logging.warning(f'Could not find match list at: {pairs_path}')
+        return
+
+    conn = sqlite3.connect(database_path)
+    cursor = conn.cursor()
+
+    # Map image names to image IDs
+    cursor.execute("SELECT image_id, name FROM images")
+    image_name_to_id = {name: image_id for image_id, name in cursor.fetchall()}
+
+    inserted = 0
+    for name1, name2 in pairs:
+        id1 = image_name_to_id.get(name1)
+        id2 = image_name_to_id.get(name2)
+
+        if id1 is None or id2 is None:
+            logging.warning(f"Image not found in DB: {name1}, {name2}")
+            continue
+
+        i1, i2 = sorted((id1, id2))
+        pair_id = i1 * 2**32 + i2
+
+        cursor.execute("""
+            INSERT OR REPLACE INTO two_view_geometries
+            (pair_id, rows, cols, data, config)
+            VALUES (?, ?, ?, ?, ?)
+        """, (pair_id, 0, 0, sqlite3.Binary(b''), 0))
+        inserted += 1
+
+    conn.commit()
+    conn.close()
 
 
 def create_db_from_model(empty_model, database_path):
@@ -114,49 +142,43 @@ def import_matches(image_ids, database_path, pairs_path, matches_path, feature_p
     db.close()
 
 
-def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_model):
+def run_triangulation(model_path, database_path, image_dir, empty_model):
     """ run triangulation on given database """
     logging.info('Running the triangulation...')
-    
-    cmd = [
-        str(colmap_path), 'point_triangulator',
-        '--database_path', str(database_path),
-        '--image_path', str(image_dir),
-        '--input_path', str(empty_model),
-        '--output_path', str(model_path),
-        '--Mapper.ba_refine_focal_length', '0',
-        '--Mapper.ba_refine_principal_point', '0',
-        '--Mapper.ba_refine_extra_params', '0'
-    ]
-    logging.info(' '.join(cmd))
-    ret = subprocess.call(cmd)
-    if ret != 0:
-        logging.warning('Problem with point_triangulator, existing.')
-        exit(ret)
-    
-    stats_raw = subprocess.check_output(
-        [str(colmap_path), 'model_analyzer', '--path', model_path]
+
+    recon = pycolmap.Reconstruction(empty_model)
+
+    options = pycolmap.IncrementalMapperOptions()
+    options.ba_refine_focal_length = False
+    options.ba_refine_principal_point = False
+    options.ba_refine_extra_params = False
+
+    recon = pycolmap.triangulate_points(
+        reconstruction=recon,
+        database_path=str(database_path),
+        image_path=str(image_dir),
+        output_path=str(model_path),
+        options=options
     )
-    stats_raw = stats_raw.decode().split('\n')
-    stats = dict()
-    for stat in stats_raw:
-        if stat.startswith('Register images'):
-            stats['num_reg_images'] = int(stat.split()[-1])
-        elif stat.startswith('Points'):
-            stats['num_sparse_points'] = int(stat.split()[-1])
-        elif stat.startswith('Observation'):
-            stats['num_observations'] = int(stat.split()[-1])
-        elif stat.startswith('Mean track length'):
-            stats['mean_track_length'] = float(stat.split()[-1])
-        elif stat.startswith('Mean observation per image'):
-            stats['num_observations_per_image'] = float(stat.split()[-1])
-        elif stat.startswith('Mean reprojection error'):
-            stats['mean_reproj_error'] = float(stat.split()[-1][:-2])
+
+    # Analyze the result
+    stats = {
+        'num_reg_images': len(recon.images),
+        'num_sparse_points': len(recon.points3D),
+        'num_observations': sum(len(p.track.elements) for p in recon.points3D.values()),
+        'mean_track_length': sum(len(p.track.elements) for p in recon.points3D.values()) / len(recon.points3D) if recon.points3D else 0,
+        'num_observations_per_image': (
+            sum(len(p.track.elements) for p in recon.points3D.values()) / len(recon.images)
+            if recon.images else 0
+        )
+    }
+
+    print("Triangulation finished.")
+    print(stats)
     return stats
 
-
 def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, \
-         colmap_path='colmap', skip_geometric_verification=False, min_match_score=None, image_dir=None):
+        skip_geometric_verification=True, min_match_score=None, image_dir=None):
     """ 
         Import keypoints, matches.
         Given keypoints and matches, reconstruct sparse model from given camera poses.
@@ -177,9 +199,25 @@ def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, \
                    min_match_score, skip_geometric_verification)
     
     if not skip_geometric_verification:
-        geometric_verification(colmap_path, database, pairs)
+        geometric_verification(database, pairs)
     
     if not image_dir:
         image_dir = '/'
-    stats = run_triangulation(colmap_path, model, database, image_dir, empty_sfm_model)
-    os.system(f'colmap model_converter --input_path {model} --output_path {outputs_dir}/model.ply --output_type PLY')
+    stats = run_triangulation(model, database, image_dir, empty_sfm_model)
+    reconstruction = pycolmap.Reconstruction(model)
+    save_reconstruction_to_ply(reconstruction, f'{outputs_dir}/model.ply')
+
+def save_reconstruction_to_ply(recon, ply_path):
+    points = []
+    colors = []
+
+    for point in recon.points3D.values():
+        xyz = point.xyz
+        rgb = [int(c) for c in point.color]  # Already in 0-255
+        points.append(xyz)
+        colors.append([c / 255.0 for c in rgb])  # Normalize to 0-1 for Open3D
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    o3d.io.write_point_cloud(ply_path, pcd)

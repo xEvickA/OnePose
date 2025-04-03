@@ -1,4 +1,5 @@
 import glob
+import os
 import torch
 import hydra
 from tqdm import tqdm
@@ -15,6 +16,7 @@ seed_everything(12345)
 
 
 def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
+    print("get default paths")
     anno_dir = osp.join(sfm_model_dir, f'outputs_{cfg.network.detection}_{cfg.network.matching}', 'anno')
     avg_anno_3d_path = osp.join(anno_dir, 'anno_3d_average.npz')
     clt_anno_3d_path = osp.join(anno_dir, 'anno_3d_collect.npz')
@@ -47,8 +49,10 @@ def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
 
 
 def load_model(cfg):
+    print("load model")
     """ Load model """
     def load_matching_model(model_path):
+        print("load matching model")
         """ Load onepose model """
         from src.models.GATsSPG_lightning_model import LitModelGATsSPG
 
@@ -60,6 +64,7 @@ def load_model(cfg):
         return trained_model
 
     def load_extractor_model(cfg, model_path):
+        print("load extractor model")
         """ Load extractor model(SuperPoint) """
         from src.models.extractors.SuperPoint.superpoint import SuperPoint
         from src.sfm.extract_features import confs
@@ -78,6 +83,7 @@ def load_model(cfg):
 
 
 def pack_data(avg_descriptors3d, clt_descriptors, keypoints3d, detection, image_size):
+    print("pack data")
     """ Prepare data for OnePose inference """
     keypoints2d = torch.Tensor(detection['keypoints'])
     descriptors2d = torch.Tensor(detection['descriptors'])
@@ -96,6 +102,7 @@ def pack_data(avg_descriptors3d, clt_descriptors, keypoints3d, detection, image_
 
 @torch.no_grad()
 def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
+    print("inference core")
     """ Inference & visualize"""
     from src.datasets.normalized_dataset import NormalizedDataset
     from src.sfm.extract_features import confs
@@ -153,7 +160,12 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
 
         # Estimate object pose by 2D-3D correspondences:
         pose_pred, pose_pred_homo, inliers = eval_utils.ransac_PnP(K_crop, mkpts2d, mkpts3d, scale=1000)
-
+        
+        # write poses to .txt
+        pose_out_dir = os.path.join(cfg.output.eval_dir, 'pred_poses')
+        os.makedirs(pose_out_dir, exist_ok=True)
+        pose_path = os.path.join(pose_out_dir, os.path.basename(img_path).replace('.png', '.txt'))
+        np.savetxt(pose_path, pose_pred_homo)
         # Evaluate:
         gt_pose_path = path_utils.get_gt_pose_path_by_color(img_path, det_type=cfg.object_detect_mode)
         pose_gt = np.loadtxt(gt_pose_path)
@@ -183,6 +195,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
 
 
 def inference(cfg):
+    print("inference")
     data_dirs = cfg.input.data_dirs
     sfm_model_dirs = cfg.input.sfm_model_dirs
     if isinstance(data_dirs, str) and isinstance(sfm_model_dirs, str):
@@ -190,12 +203,7 @@ def inference(cfg):
         sfm_model_dirs = [sfm_model_dirs]
 
     for data_dir, sfm_model_dir in tqdm(zip(data_dirs, sfm_model_dirs), total=len(data_dirs)):
-        splits = data_dir.split(" ")
-        data_root = splits[0]
-        for seq_name in splits[1:]:
-            seq_dir = osp.join(data_root, seq_name)
-            logger.info(f'Eval {seq_dir}')
-            inference_core(cfg, data_root, seq_dir, sfm_model_dir)
+        inference_core(cfg, osp.dirname(data_dir), data_dir, sfm_model_dir)
 
 
 @hydra.main(config_path='configs/', config_name='config.yaml')
