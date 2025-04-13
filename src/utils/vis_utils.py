@@ -277,6 +277,37 @@ def draw_2d_box(image, corners_2d, linewidth=3):
         pt1, pt2 = pts
         cv2.line(image, pt1, pt2, (0, 0, 255), linewidth)
 
+def draw_axes_on_image(image, K, pose, center, axis_length=0.1, thickness=3):
+    """
+    Draw XYZ axes on image given camera intrinsics and pose.
+
+    Parameters:
+        image: np.array – image to draw on (modified in place)
+        K: np.array – 3x3 camera intrinsic matrix
+        pose: np.array – 4x4 transformation matrix (world to camera)
+        axis_length: float – length of axis in 3D space
+        thickness: int – line thickness
+    """
+    R = pose[:3, :3]
+    t = pose[:3, 3].reshape(3, 1)
+
+    axis_points_3D = np.float32([
+        center,                      # origin
+        center + [axis_length, 0, 0],           # X axis
+        center + [0, axis_length, 0],           # Y axis
+        center + [0, 0, axis_length]            # Z axis
+    ]).reshape(-1, 3)
+
+    # Convert to camera coordinates
+    rvec, _ = cv2.Rodrigues(R)
+    imgpts, _ = cv2.projectPoints(axis_points_3D, rvec, t, K, None)
+    imgpts = np.int32(imgpts).reshape(-1, 2)
+
+    origin = tuple(imgpts[0])
+    cv2.line(image, origin, tuple(imgpts[1]), (0, 0, 255), thickness)   # X axis - red
+    cv2.line(image, origin, tuple(imgpts[2]), (0, 255, 0), thickness)   # Y axis - green
+    cv2.line(image, origin, tuple(imgpts[3]), (255, 0, 0), thickness)   # Z axis - blue
+    return image
 
 def draw_reprojection_pair(data, val_results, visual_color_type='conf'):
     query_image = data['query_image'][0].cpu().numpy()
@@ -328,7 +359,7 @@ def draw_reprojection_pair(data, val_results, visual_color_type='conf'):
     return figures
         
 
-def vis_reproj(image_full_path, poses, box3d_path, intrin_full_path,
+def vis_reproj(image_full_path, poses, center_path, intrin_full_path,
                save_demo=False, demo_root=None, colors=['y', 'g']):
     """ 
     Draw 2d box reprojected by 3d box.
@@ -353,17 +384,18 @@ def vis_reproj(image_full_path, poses, box3d_path, intrin_full_path,
         ])
         return K, K_homo # [3, 3], [3, 4]
 
-    box3d = np.loadtxt(box3d_path)
+    center = np.loadtxt(center_path)
+    
     K_full, _  = parse_K(intrin_full_path)
 
     assert osp.isfile(image_full_path), "Please parse full image from \"Frames.m4v\" first."
     image_full = cv2.imread(image_full_path)
 
-    for pose, color in zip(poses, colors):
-        # Draw pred 3d box
+    # for pose, color in zip(poses, colors):
+    for pose in poses:
+        # Draw pred xyz axes
         if pose is not None:
-            reproj_box_2d = reproj(K_full, pose, box3d)
-            draw_3d_box(image_full, reproj_box_2d, color=color)
+            draw_axes_on_image(image_full, K_full, pose, center, axis_length=1.0, thickness=2)
 
     if save_demo:
         img_idx = int(osp.basename(image_full_path).split('.')[0])
@@ -382,12 +414,11 @@ def save_demo_image(pose_pred, K, image_path, box3d_path, draw_box=True, save_pa
     Project 3D bbox by predicted pose and visualize
     """
     box3d = np.loadtxt(box3d_path)
-
+    box_size = np.linalg.norm(np.max(box3d, axis=0) - np.min(box3d, axis=0))
     image_full = cv2.imread(image_path)
 
     if draw_box:
-        reproj_box_2d = reproj(K, pose_pred, box3d)
-        draw_3d_box(image_full, reproj_box_2d, color='b', linewidth=10)
+        draw_axes_on_image(image_full, K, pose_pred, axis_length=box_size * 0.2, thickness=3)
     
     if save_path is not None:
         Path(save_path).parent.mkdir(exist_ok=True, parents=True)
@@ -446,4 +477,4 @@ def make_video(image_path, output_video_path):
         image = cv2.imread(osp.join(image_path, image_name))
         video.write(image)
     video.release()
-    logger.info(f"Demo vido saved to: {output_video_path}")
+    logger.info(f"Demo video saved to: {output_video_path}")

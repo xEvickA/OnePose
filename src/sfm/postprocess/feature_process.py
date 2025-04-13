@@ -33,10 +33,11 @@ def get_default_path(cfg, outputs_dir):
     return model_dir, anno_dir
 
 
-def inverse_id_name(images):
+def inverse_id_name(images): #, full_path):
     """ traverse keys of images.bin({id: image_name}), get {image_name: id} mapping. """
     inverse_dict = {}
     for key in images.keys():
+        # img_name = f'{full_path}{images[key].name}'
         img_name = images[key].name
         
         inverse_dict[img_name] = key
@@ -61,6 +62,9 @@ def gather_3d_anno(keypoints_2d, descriptors_2d, scores_2d, kp3d_idxs, image_nam
     """ For each 3d point, gather all corresponding 2d information """
     kp3d_idx_to_kp2d_idx = {}
     for kp3d_idx, feature_idx in zip(kp3d_idxs, feature_idxs):
+        # if feature_idx >= keypoints_2d.shape[0]:
+        #     print(f"Skipping invalid feature index {feature_idx} for image {image_name} (only {keypoints_2d.shape[0]} keypoints)")
+        #     continue
         kp3d_idx_to_kp2d_idx[kp3d_idx] = feature_idx
         
         if kp3d_idx not in kp3d_id_feature:
@@ -100,9 +104,16 @@ def count_features(img_lists, features, images, kp3d_id_mapping):
     kp3d_idx_image = {} # {new_3d_point_idx: [image1, image2, ...]}
     kp3d_idx_to_img_kp2d_idx = defaultdict(dict) # {new_3d_point_idx: {image_name: 2d_point_idx}}
 
-    inverse_dict = inverse_id_name(images) # {image_name: id}
+    # full_path = img_lists[0][:img_lists[0].rindex('/') + 1]
+    inverse_dict = inverse_id_name(images) #, full_path) # {image_name: id}
+    # print(inverse_dict)
+    # print(full_path)
+
     # traverse each image to find valid 2d-3d correspondence
     for img_name in img_lists:
+        # if img_name not in inverse_dict.keys():
+        #     print(f"Skipping image {img_name}, not in COLMAP model.")
+        #     continue
         feature = features[img_name]
         keypoints_2d, descriptors_2d, scores_2d = read_features(feature)
         feature_dim = descriptors_2d.shape[0]
@@ -176,10 +187,15 @@ def gather_3d_ann(kp3d_id_position, kp3d_id_feature, kp3d_id_score, kp3d_id_imag
         scores = np.empty(shape=(0, 1))
         affi_position = np.empty(shape=(0, 2))
         for old_point_idx in old_points_idxs:
+            if old_point_idx not in kp3d_id_feature:
+                print(f"Skipping old_point_idx {old_point_idx} — no 2D features available.")
+                continue
             descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0)
             scores = np.append(scores, kp3d_id_score[old_point_idx].reshape(-1, 1), axis=0)
             affi_position = np.append(affi_position, kp3d_id_position[old_point_idx], axis=0)
-
+        if descriptors.shape[0] == 0:
+            print(f"Skipping new_point_idx {new_point_idx} — no features gathered from its old points.")
+            continue
         kp3d_position = np.append(kp3d_position, xyzs[new_point_idx].reshape(1, 3), axis=0) 
         kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0)
         kp3d_scores = np.append(kp3d_scores, scores, axis=0)
@@ -224,9 +240,6 @@ def get_assign_matrix(xys, xyzs, kp3d_idx_to_kp2d_idx, kp3d_id_mapping):
     num_matches = len(MN1)
     assign_matrix = np.array(MN1).T
 
-    print("=> match pairs num: ", num_matches)
-    print('=> total 2d points: ', xys.shape[0])
-    print("=> total 3d points: ", xyzs.shape[0])
     return num_matches, assign_matrix
 
 

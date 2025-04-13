@@ -63,3 +63,6 @@ def get_intrin_full_path(seq_root):
 def get_3d_box_path(data_root):
     return osp.join(data_root, "box3d_corners.txt")
 
+def get_center_path(data_root):
+    return osp.join(data_root, "center.txt")
+

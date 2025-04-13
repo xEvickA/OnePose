@@ -7,11 +7,11 @@ import os.path as osp
 from loguru import logger
 from pathlib import Path
 from omegaconf import DictConfig
+import time
 
 
 def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
            idxs_file, img_id, ann_id, images, annotations):
-    print("merge")
     """ To prepare training and test objects, we merge annotations about difference objs"""
     with open(anno_2d_file, 'r') as f:
         annos_2d = json.load(f)
@@ -39,7 +39,6 @@ def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
 
 
 def merge_anno(cfg):
-    print("merge anno")
     """ Merge different objects' anno file into one anno file """
     anno_dirs = []
 
@@ -80,7 +79,6 @@ def merge_anno(cfg):
 
 
 def sfm(cfg):
-    print("sfm")
     """ Reconstruct and postprocess sparse object point cloud, and store point cloud features"""
     data_dirs = cfg.dataset.data_dir
     down_ratio = cfg.sfm.down_ratio
@@ -95,7 +93,7 @@ def sfm(cfg):
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
             img_lists += glob.glob(str(Path(seq_dir)) + '/color/*.png', recursive=True)
-
+        
         down_img_lists = []
         for img_file in img_lists:
             index = int(img_file.split('/')[-1].split('.')[0])
@@ -116,7 +114,6 @@ def sfm(cfg):
 
 
 def sfm_core(cfg, img_lists, outputs_dir_root):
-    print("sfm core")
     """ Sparse reconstruction: extract features, match features, triangulation"""
     from src.sfm import extract_features, match_features, \
                          generate_empty, triangulation, pairs_from_poses
@@ -144,11 +141,9 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     
     
 def postprocess(cfg, img_lists, root_dir, outputs_dir_root):
-    print("postprocess")
     """ Filter points and average feature"""
     from src.sfm.postprocess import filter_points, feature_process, filter_tkl
 
-    bbox_path = osp.join(root_dir, "box3d_corners.txt")
     # Construct output directory structure:
     outputs_dir = osp.join(outputs_dir_root, 'outputs' + '_' + cfg.network.detection + '_' + cfg.network.matching)
     feature_out = osp.join(outputs_dir, f'feats-{cfg.network.detection}.h5')
@@ -160,7 +155,7 @@ def postprocess(cfg, img_lists, root_dir, outputs_dir_root):
     filter_tkl.vis_tkl_filtered_pcds(model_path, points_count_list, track_length, outputs_dir) # For visualization only
 
     # Leverage the selected feature track length threshold and 3D BBox to filter 3D points:
-    xyzs, points_idxs = filter_points.filter_3d(model_path, track_length, bbox_path)
+    xyzs, points_idxs = filter_points.filter_3d(model_path, track_length)
     # Merge 3d points by distance between points
     merge_xyzs, merge_idxs = filter_points.merge(xyzs, points_idxs, dist_threshold=1e-3) 
 

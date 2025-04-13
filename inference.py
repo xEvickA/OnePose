@@ -161,11 +161,6 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         # Estimate object pose by 2D-3D correspondences:
         pose_pred, pose_pred_homo, inliers = eval_utils.ransac_PnP(K_crop, mkpts2d, mkpts3d, scale=1000)
         
-        # write poses to .txt
-        pose_out_dir = os.path.join(cfg.output.eval_dir, 'pred_poses')
-        os.makedirs(pose_out_dir, exist_ok=True)
-        pose_path = os.path.join(pose_out_dir, os.path.basename(img_path).replace('.png', '.txt'))
-        np.savetxt(pose_path, pose_pred_homo)
         # Evaluate:
         gt_pose_path = path_utils.get_gt_pose_path_by_color(img_path, det_type=cfg.object_detect_mode)
         pose_gt = np.loadtxt(gt_pose_path)
@@ -174,11 +169,11 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         # Visualize:
         if cfg.save_wis3d:
             poses = [pose_gt, pose_pred_homo]
-            box3d_path = path_utils.get_3d_box_path(data_root)
+            center_path = path_utils.get_center_path(data_root)
             intrin_full_path = path_utils.get_intrin_full_path(seq_dir)
             image_full_path = path_utils.get_img_full_path_by_color(img_path, det_type=cfg.object_detect_mode)
 
-            image_full = vis_utils.vis_reproj(image_full_path, poses, box3d_path, intrin_full_path,
+            image_full = vis_utils.vis_reproj(image_full_path, poses, center_path, intrin_full_path,
                                               save_demo=cfg.save_demo, demo_root=cfg.demo_root)
             mkpts3d_2d = vis_utils.reproj(K_crop, pose_gt, mkpts3d)
             image0 = Image.open(img_path).convert('LA')
@@ -208,6 +203,7 @@ def inference(cfg):
 
 @hydra.main(config_path='configs/', config_name='config.yaml')
 def main(cfg):
+    # print(cfg)
     globals()[cfg.type](cfg)
 
 if __name__ == "__main__":
