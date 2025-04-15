@@ -16,7 +16,6 @@ seed_everything(12345)
 
 
 def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
-    print("get default paths")
     anno_dir = osp.join(sfm_model_dir, f'outputs_{cfg.network.detection}_{cfg.network.matching}', 'anno')
     avg_anno_3d_path = osp.join(anno_dir, 'anno_3d_average.npz')
     clt_anno_3d_path = osp.join(anno_dir, 'anno_3d_collect.npz')
@@ -49,7 +48,6 @@ def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
 
 
 def load_model(cfg):
-    print("load model")
     """ Load model """
     def load_matching_model(model_path):
         print("load matching model")
@@ -64,7 +62,6 @@ def load_model(cfg):
         return trained_model
 
     def load_extractor_model(cfg, model_path):
-        print("load extractor model")
         """ Load extractor model(SuperPoint) """
         from src.models.extractors.SuperPoint.superpoint import SuperPoint
         from src.sfm.extract_features import confs
@@ -83,7 +80,6 @@ def load_model(cfg):
 
 
 def pack_data(avg_descriptors3d, clt_descriptors, keypoints3d, detection, image_size):
-    print("pack data")
     """ Prepare data for OnePose inference """
     keypoints2d = torch.Tensor(detection['keypoints'])
     descriptors2d = torch.Tensor(detection['descriptors'])
@@ -102,7 +98,6 @@ def pack_data(avg_descriptors3d, clt_descriptors, keypoints3d, detection, image_
 
 @torch.no_grad()
 def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
-    print("inference core")
     """ Inference & visualize"""
     from src.datasets.normalized_dataset import NormalizedDataset
     from src.sfm.extract_features import confs
@@ -187,10 +182,12 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
     obj_name = sfm_model_dir.split('/')[-1]
     seq_name = seq_dir.split('/')[-1]
     eval_utils.record_eval_result(cfg.output.eval_dir, obj_name, seq_name, eval_result)
+    
+    images_path = osp.join(cfg.demo_root, obj_name)
+    vis_utils.make_video(images_path, cfg.demo_root, obj_name, cfg.fps)
 
 
 def inference(cfg):
-    print("inference")
     data_dirs = cfg.input.data_dirs
     sfm_model_dirs = cfg.input.sfm_model_dirs
     if isinstance(data_dirs, str) and isinstance(sfm_model_dirs, str):
@@ -203,7 +200,6 @@ def inference(cfg):
 
 @hydra.main(config_path='configs/', config_name='config.yaml')
 def main(cfg):
-    # print(cfg)
     globals()[cfg.type](cfg)
 
 if __name__ == "__main__":

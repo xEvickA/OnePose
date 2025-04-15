@@ -405,6 +405,7 @@ def vis_reproj(image_full_path, poses, center_path, intrin_full_path,
 
         save_path = osp.join(demo_dir, '{:05d}.jpg'.format(img_idx))
         print(f'=> Saving image: {save_path}')
+        # img = cv2.rotate(image_full, cv2. ROTATE_90_COUNTERCLOCKWISE)
         cv2.imwrite(save_path, image_full)
 
     return image_full
@@ -413,12 +414,8 @@ def save_demo_image(pose_pred, K, image_path, box3d_path, draw_box=True, save_pa
     """ 
     Project 3D bbox by predicted pose and visualize
     """
-    box3d = np.loadtxt(box3d_path)
-    box_size = np.linalg.norm(np.max(box3d, axis=0) - np.min(box3d, axis=0))
     image_full = cv2.imread(image_path)
-
-    if draw_box:
-        draw_axes_on_image(image_full, K, pose_pred, axis_length=box_size * 0.2, thickness=3)
+    # img = cv2.rotate(image_full, cv2. ROTATE_90_COUNTERCLOCKWISE)
     
     if save_path is not None:
         Path(save_path).parent.mkdir(exist_ok=True, parents=True)
@@ -463,18 +460,19 @@ def dump_wis3d(idx, cfg, data_dir, image0, image1, image_full,
     image_full_pil = Image.fromarray(cv2.cvtColor(image_full, cv2.COLOR_BGR2RGB))
     wis3d.add_image(image_full_pil, name='results')
 
-def make_video(image_path, output_video_path):
+def make_video(image_path, output_video_path, obj_name, fps=24):
     # Generate video:
     images = natsort.natsorted(os.listdir(image_path))
-    Path(output_video_path).parent.mkdir(parents=True, exist_ok=True)
-    H, W, C = cv2.imread(osp.join(image_path, images[0])).shape
-    if osp.exists(output_video_path):
-        os.remove(output_video_path)
-    
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    video = cv2.VideoWriter(output_video_path, fourcc, 24, (W, H))
-    for id, image_name in enumerate(images):
-        image = cv2.imread(osp.join(image_path, image_name))
-        video.write(image)
+    output_video = os.path.join(output_video_path, obj_name + ".mp4")
+    first_image_path = os.path.join(image_path, images[0])
+    frame = cv2.imread(first_image_path)
+    height, width, layers = frame.shape
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  
+    video = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+    for image in images:
+        img_path = os.path.join(image_path, image)
+        frame = cv2.imread(img_path)
+        video.write(frame)
     video.release()
     logger.info(f"Demo video saved to: {output_video_path}")

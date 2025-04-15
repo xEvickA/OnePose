@@ -5,7 +5,7 @@ task_name: inference_own_data
 num_leaf: 8
 suffix: ''
 save_demo: True
-save_wis3d: True
+save_wis3d: False
 demo_root: null
 
 model:
