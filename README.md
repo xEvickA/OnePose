@@ -29,9 +29,6 @@ cd $REPO_ROOT
 sh ./scripts/prepare_2D_matching_resources.sh
 ```
 
-[COLMAP](https://colmap.github.io/) is used in this project for Structure-from-Motion. 
-Please refer to the official [instructions](https://colmap.github.io/install.html) for the installation.
-
 [Optional, WIP] You may optionally try out our web-based 3D visualization tool [Wis3D](https://github.com/zju3dv/Wis3D) for convenient and interactive visualizations of feature matches. We also provide many other cool visualization features in Wis3D, welcome to try it out.
 
 ```bash
