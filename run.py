@@ -13,6 +13,7 @@ import time
 def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
            idxs_file, img_id, ann_id, images, annotations):
     """ To prepare training and test objects, we merge annotations about difference objs"""
+    print("MERGE")
     with open(anno_2d_file, 'r') as f:
         annos_2d = json.load(f)
     
@@ -40,6 +41,7 @@ def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
 
 def merge_anno(cfg):
     """ Merge different objects' anno file into one anno file """
+    print("MERGE ANNO")
     anno_dirs = []
 
     if cfg.split == 'train':
@@ -80,6 +82,7 @@ def merge_anno(cfg):
 
 def sfm(cfg):
     """ Reconstruct and postprocess sparse object point cloud, and store point cloud features"""
+    print("SFM")
     data_dirs = cfg.dataset.data_dir
     down_ratio = cfg.sfm.down_ratio
     data_dirs = [data_dirs] if isinstance(data_dirs, str) else data_dirs
@@ -115,6 +118,7 @@ def sfm(cfg):
 
 def sfm_core(cfg, img_lists, outputs_dir_root):
     """ Sparse reconstruction: extract features, match features, triangulation"""
+    print("SFM CORE")
     from src.sfm import extract_features, match_features, \
                          generate_empty, triangulation, pairs_from_poses
 
@@ -125,7 +129,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     matches_out = osp.join(outputs_dir, f'matches-{cfg.network.matching}.h5')
     empty_dir = osp.join(outputs_dir, 'sfm_empty')
     deep_sfm_dir = osp.join(outputs_dir, 'sfm_ws')
-    
+
     if cfg.redo:
         os.system(f'rm -rf {outputs_dir}') 
         Path(outputs_dir).mkdir(exist_ok=True, parents=True)
@@ -138,10 +142,27 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
         # Reconstruct 3D point cloud with known image poses:
         generate_empty.generate_model(img_lists, empty_dir)
         triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
+
+    # # if cfg.redo:
+    # # os.system(f'rm -rf {outputs_dir}') 
+    # # Path(outputs_dir).mkdir(exist_ok=True, parents=True)
+
+    # # Extract image features, construct image pairs and then match:
+    # extract_features.main(img_lists, feature_out, cfg)
+    # # pairs_from_poses.covis_from_pose(img_lists, covis_pairs_out, cfg.sfm.covis_num, max_rotation=cfg.sfm.rotation_thresh)
+    # with open(covis_pairs_out, "w") as f:
+    #     for i in range(len(img_lists) - 1):
+    #         f.write(f"{img_lists[i]} {img_lists[i+1]}\n")
+    # match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
+
+    # # Reconstruct 3D point cloud with known image poses:
+    # generate_empty.generate_model(img_lists, empty_dir)
+    # triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
     
     
 def postprocess(cfg, img_lists, root_dir, outputs_dir_root):
     """ Filter points and average feature"""
+    print("POSTPROCESS")
     from src.sfm.postprocess import filter_points, feature_process, filter_tkl
 
     # Construct output directory structure:

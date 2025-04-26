@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 import torch
 import hydra
 from tqdm import tqdm
@@ -105,7 +106,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
 
     matching_model, extractor_model = load_model(cfg)
     img_lists, paths = get_default_paths(cfg, data_root, seq_dir, sfm_model_dir)
-
+    
     dataset = NormalizedDataset(img_lists, confs[cfg.network.detection]['preprocessing'])
     loader = DataLoader(dataset, num_workers=1)
     evaluator = Evaluator()
@@ -131,12 +132,14 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
                                 idxs, num_3d, num_leaf
                             )
 
+    K_crop = np.loadtxt(f'{cfg.input.data_dirs}/k.txt')
+    pose_path = f'{cfg.demo_root}/poses'
+    shutil.rmtree(pose_path, ignore_errors=True)
+    os.makedirs(pose_path, exist_ok=True)
+
     for data in tqdm(loader):
         img_path = data['path'][0]
         inp = data['image'].cuda()
-
-        intrin_path = path_utils.get_intrin_path_by_color(img_path, det_type=cfg.object_detect_mode)
-        K_crop = np.loadtxt(intrin_path)
 
         # Detect query image keypoints and extract descriptors:
         pred_detection = extractor_model(inp)
@@ -157,34 +160,43 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         pose_pred, pose_pred_homo, inliers = eval_utils.ransac_PnP(K_crop, mkpts2d, mkpts3d, scale=1000)
         
         # Evaluate:
-        gt_pose_path = path_utils.get_gt_pose_path_by_color(img_path, det_type=cfg.object_detect_mode)
-        pose_gt = np.loadtxt(gt_pose_path)
-        evaluator.evaluate(pose_pred, pose_gt)
-
+        try:
+            gt_pose_path = path_utils.get_gt_pose_path_by_color(img_path, det_type=cfg.object_detect_mode)
+            pose_gt = np.loadtxt(gt_pose_path)
+            evaluator.evaluate(pose_pred, pose_gt)
+        except:
+            pose_gt = None
+        
         # Visualize:
         if cfg.save_wis3d:
-            poses = [pose_gt, pose_pred_homo]
+            poses = [pose_pred_homo]
+            if pose_gt:
+                poses.append(pose_gt)
+            
             center_path = path_utils.get_center_path(data_root)
             intrin_full_path = path_utils.get_intrin_full_path(seq_dir)
             image_full_path = path_utils.get_img_full_path_by_color(img_path, det_type=cfg.object_detect_mode)
 
             image_full = vis_utils.vis_reproj(image_full_path, poses, center_path, intrin_full_path,
                                               save_demo=cfg.save_demo, demo_root=cfg.demo_root)
-            mkpts3d_2d = vis_utils.reproj(K_crop, pose_gt, mkpts3d)
+            mkpts3d_2d = vis_utils.reproj(K_crop, pose_pred_homo, mkpts3d)
             image0 = Image.open(img_path).convert('LA')
             image1 = image0.copy()
             vis_utils.dump_wis3d(idx, cfg, seq_dir, image0, image1, image_full,
                                  mkpts2d, mkpts3d_2d, mconf, inliers)
 
             idx += 1
+        # f'{intrins_path}/{i}.txt', intrin, fmt="%.8f"
+        image_name = img_path.split('/')[-1].replace("png", "txt")
+        np.savetxt(f'{pose_path}/{image_name}', pose_pred_homo, fmt="%.8f")
+        
 
     eval_result = evaluator.summarize()
     obj_name = sfm_model_dir.split('/')[-1]
     seq_name = seq_dir.split('/')[-1]
     eval_utils.record_eval_result(cfg.output.eval_dir, obj_name, seq_name, eval_result)
-    
-    images_path = osp.join(cfg.demo_root, obj_name)
-    vis_utils.make_video(images_path, cfg.demo_root, obj_name, cfg.fps)
+    images_path = osp.join(cfg.demo_root, seq_name)
+    vis_utils.make_video(images_path, cfg.demo_root, seq_name, cfg.fps)
 
 
 def inference(cfg):

@@ -277,7 +277,7 @@ def draw_2d_box(image, corners_2d, linewidth=3):
         pt1, pt2 = pts
         cv2.line(image, pt1, pt2, (0, 0, 255), linewidth)
 
-def draw_axes_on_image(image, K, pose, center, axis_length=0.1, thickness=3):
+def draw_axes_on_image(image, K, pose, center, color, axis_length=0.1, thickness=3):
     """
     Draw XYZ axes on image given camera intrinsics and pose.
 
@@ -304,9 +304,9 @@ def draw_axes_on_image(image, K, pose, center, axis_length=0.1, thickness=3):
     imgpts = np.int32(imgpts).reshape(-1, 2)
 
     origin = tuple(imgpts[0])
-    cv2.line(image, origin, tuple(imgpts[1]), (0, 0, 255), thickness)   # X axis - red
-    cv2.line(image, origin, tuple(imgpts[2]), (0, 255, 0), thickness)   # Y axis - green
-    cv2.line(image, origin, tuple(imgpts[3]), (255, 0, 0), thickness)   # Z axis - blue
+    cv2.line(image, origin, tuple(imgpts[1]), color[0], thickness)   # X axis - red
+    cv2.line(image, origin, tuple(imgpts[2]), color[1], thickness)   # Y axis - green
+    cv2.line(image, origin, tuple(imgpts[3]), color[2], thickness)   # Z axis - blue
     return image
 
 def draw_reprojection_pair(data, val_results, visual_color_type='conf'):
@@ -360,7 +360,7 @@ def draw_reprojection_pair(data, val_results, visual_color_type='conf'):
         
 
 def vis_reproj(image_full_path, poses, center_path, intrin_full_path,
-               save_demo=False, demo_root=None, colors=['y', 'g']):
+               save_demo=False, demo_root=None, colors=[[(0, 0, 255), (0, 255, 0), (255, 0, 0)], [(255, 18, 255), (255, 255, 134), (67, 188, 255)]]):
     """ 
     Draw 2d box reprojected by 3d box.
     Yellow for gt pose, and green for pred pose.
@@ -391,11 +391,11 @@ def vis_reproj(image_full_path, poses, center_path, intrin_full_path,
     assert osp.isfile(image_full_path), "Please parse full image from \"Frames.m4v\" first."
     image_full = cv2.imread(image_full_path)
 
-    # for pose, color in zip(poses, colors):
-    for pose in poses:
+    for pose, color in zip(poses, colors):
+    # for pose in poses:
         # Draw pred xyz axes
         if pose is not None:
-            draw_axes_on_image(image_full, K_full, pose, center, axis_length=1.0, thickness=2)
+            draw_axes_on_image(image_full, K_full, pose, center, color, axis_length=1.0, thickness=2)
 
     if save_demo:
         img_idx = int(osp.basename(image_full_path).split('.')[0])
